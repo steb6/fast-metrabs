@@ -1,0 +1,26 @@
+# Conda environment for human_pose_estimator
+# NOTE: This environment installs pip packages targeting CUDA 12 (package names with "cu12").
+# If your system CUDA is a different major version (e.g. 11), change the package names
+# from "tensorrt-cu12" / "tensorrt-lean-cu12" / "tensorrt-dispatch-cu12" to the matching
+# variant (for example: "tensorrt-cu11").
+
+name: human_pose_estimator
+channels:
+	- conda-forge
+	- defaults
+dependencies:
+	- python=3.9
+	- numpy
+	- pip
+	- pycuda
+	- loguru
+	- tqdm
+	- opencv-python
+	- matplotlib
+	- pip:
+		- einops
+		- tensorrt-cu12
+		- tensorrt-lean-cu12
+		- tensorrt-dispatch-cu12
+		- polygraphy
+		- onnx
