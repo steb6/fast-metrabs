@@ -224,8 +224,22 @@ if __name__ == "__main__":
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
         img = cv2.resize(img, (640, 480))
+
+        cv2.imshow("raw", img)
+
         det_res = d.estimate(img)
         bbox = det_res["bbox"]
+
+        if bbox is not None:
+            x1_, y1_, x2_, y2_ = bbox
+            xm = int((x1_ + x2_) / 2)
+            ym = int((y1_ + y2_) / 2)
+            l = max(xm - x1_, ym - y1_)
+            img_ = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
+            if img_.size > 0:
+                img_ = cv2.resize(img_, (224, 224))
+                cv2.imshow("bbox", img_)
+
         hpe_res = h.estimate(img, bbox, 0.0)
 
         if hpe_res is not None:
@@ -241,13 +255,5 @@ if __name__ == "__main__":
                 vis.print_pose(p*5, e)
                 vis.sleep(0.001)
 
-            if b is not None:
-                x1_, x2_, y1_, y2_ = b
-                xm = int((x1_ + x2_) / 2)
-                ym = int((y1_ + y2_) / 2)
-                l = max(xm - x1_, ym - y1_)
-                img = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
-                img = cv2.resize(img, (224, 224))
-
-        cv2.imshow("", img)
+        cv2.imshow("after", img)
         cv2.waitKey(1)

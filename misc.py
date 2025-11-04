@@ -2,28 +2,6 @@ import numpy as np
 import einops
 
 
-# TODO
-# def is_pose_consistent_with_box(pose2d, box):
-#     """Check if pose prediction is consistent with the original box it was based on.
-#     Concretely, check if the intersection between the pose's bounding box and the detection has
-#     at least half the area of the detection box. This is like IoU but the denominator is the
-#     area of the detection box, so that truncated poses are handled correctly.
-#     """
-#
-#     # Compute the bounding box around the 2D joints
-#     posebox_start = tf.reduce_min(pose2d, axis=-2)
-#     posebox_end = tf.reduce_max(pose2d, axis=-2)
-#
-#     box_start = box[..., :2]
-#     box_end = box[..., :2] + box[..., 2:4]
-#     box_area = tf.reduce_prod(box[..., 2:4], axis=-1)
-#
-#     intersection_start = tf.maximum(box_start, posebox_start)
-#     intersection_end = tf.minimum(box_end, posebox_end)
-#     intersection_area = tf.reduce_prod(tf.nn.relu(intersection_end - intersection_start), axis=-1)
-#     return intersection_area > 0.5 * box_area
-
-
 def nms_cpu(boxes, confs, nms_thresh=0.7, min_mode=False):
     # print(boxes.shape)
     x1 = boxes[:, 0]
@@ -307,25 +285,6 @@ def rotation_mat_zaxis(angle):
         np.stack([sin, cos, _0], axis=-1),
         np.stack([_0, _0, _1], axis=-1)], axis=-2)
 
-
-def get_augmentations(num_aug, rot_aug_linspace_noend=True):
-    # Set up the test-time augmentation parameters
-    aug_gammas = np.linspace(0.6, 1.0, num_aug)
-    aug_angle_range = np.float32(np.deg2rad(25))
-    if rot_aug_linspace_noend:
-        aug_angles = np.linspace(-aug_angle_range, aug_angle_range, num_aug + 1)[:-1]
-    else:
-        aug_angles = np.linspace(-aug_angle_range, aug_angle_range, num_aug)
-    aug_scales = np.concatenate([
-        np.linspace(0.8, 1.0, (num_aug + 1) // 2)[:-1],
-        np.linspace(1.0, 1.1, num_aug - num_aug // 2)], axis=0)
-    aug_should_flip = (np.arange(num_aug) - num_aug // 2) % 2 != 0
-    aug_flipmat = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float32)
-    aug_maybe_flipmat = np.where(
-        aug_should_flip[:, np.newaxis, np.newaxis], aug_flipmat, np.eye(3))
-    aug_rotmat = rotation_mat_zaxis(-aug_angles)
-    aug_rotflipmat = aug_maybe_flipmat @ aug_rotmat
-    return aug_should_flip, aug_rotflipmat, aug_gammas, aug_scales
 
 import numpy as np
 import einops
@@ -635,23 +594,3 @@ def rotation_mat_zaxis(angle):
         np.stack([cos, -sin, _0], axis=-1),
         np.stack([sin, cos, _0], axis=-1),
         np.stack([_0, _0, _1], axis=-1)], axis=-2)
-
-
-def get_augmentations(num_aug, rot_aug_linspace_noend=True):
-    # Set up the test-time augmentation parameters
-    aug_gammas = np.linspace(0.6, 1.0, num_aug)
-    aug_angle_range = np.float32(np.deg2rad(25))
-    if rot_aug_linspace_noend:
-        aug_angles = np.linspace(-aug_angle_range, aug_angle_range, num_aug + 1)[:-1]
-    else:
-        aug_angles = np.linspace(-aug_angle_range, aug_angle_range, num_aug)
-    aug_scales = np.concatenate([
-        np.linspace(0.8, 1.0, (num_aug + 1) // 2)[:-1],
-        np.linspace(1.0, 1.1, num_aug - num_aug // 2)], axis=0)
-    aug_should_flip = (np.arange(num_aug) - num_aug // 2) % 2 != 0
-    aug_flipmat = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float32)
-    aug_maybe_flipmat = np.where(
-        aug_should_flip[:, np.newaxis, np.newaxis], aug_flipmat, np.eye(3))
-    aug_rotmat = rotation_mat_zaxis(-aug_angles)
-    aug_rotflipmat = aug_maybe_flipmat @ aug_rotmat
-    return aug_should_flip, aug_rotflipmat, aug_gammas, aug_scales
