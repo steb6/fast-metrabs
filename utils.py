@@ -29,30 +29,56 @@ class Runner:
             buf = f.read()
             engine = runtime.deserialize_cuda_engine(buf)
 
-        # prepare buffer
+        # Create execution context
+        context = engine.create_execution_context()
+
+        # Prepare buffers using new TensorRT API (set_input_shape, set_tensor_address, execute_async_v3)
+        # Identify input and output tensors by iterating over all I/O tensors
         inputs = []
         outputs = []
-        bindings = []
-        for binding in engine:
-            size = trt.volume(engine.get_binding_shape(binding)) * engine.max_batch_size  # 256 x 256 x 3 ( x 1 )
-            dtype = trt.nptype(engine.get_binding_dtype(binding))
-            host_mem = cuda.pagelocked_empty(size, dtype)
-            device_mem = cuda.mem_alloc(host_mem.nbytes)  # (256 x 256 x 3 ) x (32 / 4)
-            bindings.append(int(device_mem))
-            if engine.binding_is_input(binding):
-                inputs.append(HostDeviceMem(host_mem, device_mem))
+        input_names = []
+        output_names = []
+
+        for i in range(engine.num_io_tensors):
+            tensor_name = engine.get_tensor_name(i)
+            # Determine if this tensor is an input or output
+            if engine.get_tensor_mode(tensor_name) == trt.TensorIOMode.INPUT:
+                input_names.append(tensor_name)
             else:
-                outputs.append(HostDeviceMem(host_mem, device_mem))
+                output_names.append(tensor_name)
 
-        # store
+        # Allocate device memory for inputs
+        # We will set shapes dynamically per inference, so allocate a reasonable max size
+        # For now, get the shape from the engine (if static) or use a default profile shape
+        for tensor_name in input_names:
+            shape = engine.get_tensor_shape(tensor_name)
+            # Replace -1 (dynamic dims) with 1 for allocation purposes
+            shape = tuple([d if d > 0 else 1 for d in shape])
+            dtype = trt.nptype(engine.get_tensor_dtype(tensor_name))
+            size = trt.volume(shape)
+            host_mem = cuda.pagelocked_empty(size, dtype)
+            device_mem = cuda.mem_alloc(host_mem.nbytes)
+            inputs.append(HostDeviceMem(host_mem, device_mem))
+
+        # Allocate device memory for outputs
+        # Output shapes may depend on input shapes, so we query after setting input shapes
+        for tensor_name in output_names:
+            shape = engine.get_tensor_shape(tensor_name)
+            shape = tuple([d if d > 0 else 1 for d in shape])
+            dtype = trt.nptype(engine.get_tensor_dtype(tensor_name))
+            size = trt.volume(shape)
+            host_mem = cuda.pagelocked_empty(size, dtype)
+            device_mem = cuda.mem_alloc(host_mem.nbytes)
+            outputs.append(HostDeviceMem(host_mem, device_mem))
+
+        # Store
         self.stream = cuda.Stream()
-        self.context = None
-        self.context = engine.create_execution_context()
+        self.context = context
         self.engine = engine
-
         self.inputs = inputs
         self.outputs = outputs
-        self.bindings = bindings
+        self.input_names = input_names
+        self.output_names = output_names
 
         self.warmup()
         logger.success(f'{Path(engine_path).stem} engine loaded')
@@ -62,14 +88,47 @@ class Runner:
         self(*args)
 
     def __call__(self, *args):
-
+        # Copy input data to host buffers
         for i, x in enumerate(args):
             x = x.ravel()
             np.copyto(self.inputs[i].host, x)
 
-        [cuda.memcpy_htod_async(inp.device, inp.host, self.stream) for inp in self.inputs]
-        self.context.execute_async_v2(bindings=self.bindings, stream_handle=self.stream.handle)
-        [cuda.memcpy_dtoh_async(out.host, out.device, self.stream) for out in self.outputs]
+        # Set input shapes dynamically (if needed)
+        for i, tensor_name in enumerate(self.input_names):
+            actual_shape = args[i].shape
+            self.context.set_input_shape(tensor_name, actual_shape)
+
+        # Verify all shapes are specified
+        assert self.context.all_binding_shapes_specified, "Not all input shapes are specified"
+
+        # Reallocate output buffers if shapes changed (query actual output shapes from context)
+        for i, tensor_name in enumerate(self.output_names):
+            shape = self.context.get_tensor_shape(tensor_name)
+            dtype = trt.nptype(self.engine.get_tensor_dtype(tensor_name))
+            size = trt.volume(shape)
+            # Check if reallocation is needed
+            if self.outputs[i].host.size != size:
+                self.outputs[i].host = cuda.pagelocked_empty(size, dtype)
+                self.outputs[i].device = cuda.mem_alloc(self.outputs[i].host.nbytes)
+
+        # Copy inputs to device
+        for inp in self.inputs:
+            cuda.memcpy_htod_async(inp.device, inp.host, self.stream)
+
+        # Set tensor addresses (new API)
+        for i, tensor_name in enumerate(self.input_names):
+            self.context.set_tensor_address(tensor_name, int(self.inputs[i].device))
+        for i, tensor_name in enumerate(self.output_names):
+            self.context.set_tensor_address(tensor_name, int(self.outputs[i].device))
+
+        # Execute inference (new API: execute_async_v3)
+        self.context.execute_async_v3(stream_handle=self.stream.handle)
+
+        # Copy outputs back to host
+        for out in self.outputs:
+            cuda.memcpy_dtoh_async(out.host, out.device, self.stream)
+
+        # Synchronize
         self.stream.synchronize()
 
         res = [out.host for out in self.outputs]

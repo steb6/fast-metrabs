@@ -8,6 +8,8 @@ import cv2
 import os
 from visualizer import MPLPosePrinter
 import copy
+from human_pose_estimator import HumanDetector
+from configs import HPE, HD
 
 
 class HumanPoseEstimator:
@@ -215,17 +217,22 @@ if __name__ == "__main__":
 
     vis = MPLPosePrinter()
 
+    d = HumanDetector(**HD.Args.to_dict())
+
     h = HumanPoseEstimator(**HPE.Args.to_dict())
 
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
-        r = h.estimate(img)
+        img = cv2.resize(img, (640, 480))
+        det_res = d.estimate(img)
+        bbox = det_res["bbox"]
+        hpe_res = h.estimate(img, bbox, 0.0)
 
-        if r is not None:
+        if hpe_res is not None:
 
-            p = r["pose"]
-            e = r["edges"]
-            b = r["bbox"]
+            p = hpe_res["pose"]
+            e = hpe_res["edges"]
+            b = det_res["bbox"]
 
             if p is not None:
                 print(np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(p[0])))))

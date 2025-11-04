@@ -38,7 +38,7 @@ class MPLPosePrinter:
         plt.show()
 
     def clear(self):
-        self.ax.lines.clear()
+        self.ax.clear()
 
     @staticmethod
     def sleep(t):

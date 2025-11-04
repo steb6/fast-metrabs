@@ -1,12 +1,56 @@
 import pickle
-from misc import homography, is_within_fov, reconstruct_absolute
+from misc import homography, is_within_fov, reconstruct_absolute, postprocess_yolo_output
 import einops
 import numpy as np
-from runner import Runner
+from utils import Runner
 from tqdm import tqdm
 import cv2
 from visualizer import MPLPosePrinter
 import copy
+
+
+class HumanDetector:
+    def __init__(self, yolo_thresh=None, nms_thresh=None, yolo_engine_path=None):
+
+        self.yolo_thresh = yolo_thresh
+        self.nms_thresh = nms_thresh
+        self.yolo = Runner(yolo_engine_path)  # model_config.yolo_engine_path
+
+    def estimate(self, rgb):
+
+        # Preprocess for yolo
+        square_img = cv2.resize(rgb, (256, 256), fx=1.0, fy=1.0, interpolation=cv2.INTER_AREA)
+        yolo_in = copy.deepcopy(square_img)
+        yolo_in = cv2.cvtColor(yolo_in, cv2.COLOR_BGR2RGB)
+        yolo_in = np.transpose(yolo_in, (2, 0, 1)).astype(np.float32)
+        yolo_in = np.expand_dims(yolo_in, axis=0)
+        yolo_in = yolo_in / 255.0
+
+        # Yolo
+        outputs = self.yolo(yolo_in)
+        boxes, confidences = outputs[0].reshape(1, 4032, 1, 4), outputs[1].reshape(1, 4032, 80)
+        bboxes_batch = postprocess_yolo_output(boxes, confidences, self.yolo_thresh, self.nms_thresh)
+
+        # Get only the bounding box with the human with highest probability
+        box = bboxes_batch[0]  # Remove batch dimension
+        humans = []
+        for e in box:  # For each object in the image
+            if e[5] == 0:  # If it is a human
+                humans.append(e)
+        if len(humans) > 0:
+            # humans.sort(key=lambda x: x[4], reverse=True)  # Sort with decreasing probability
+            humans.sort(key=lambda x: (x[2]-x[0])*(x[3]-x[1]), reverse=True)  # Sort with decreasing area  # TODO TEST
+            human = humans[0]
+        else:
+            return {"bbox": None}
+
+        # Preprocess for BackBone
+        x1 = int(human[0] * rgb.shape[1]) if int(human[0] * rgb.shape[1]) > 0 else 0
+        y1 = int(human[1] * rgb.shape[0]) if int(human[1] * rgb.shape[0]) > 0 else 0
+        x2 = int(human[2] * rgb.shape[1]) if int(human[2] * rgb.shape[1]) > 0 else 0
+        y2 = int(human[3] * rgb.shape[0]) if int(human[3] * rgb.shape[0]) > 0 else 0
+
+        return {"rgb": rgb, "bbox": (x1, y1, x2, y2)}
 
 
 class HumanPoseEstimator:
