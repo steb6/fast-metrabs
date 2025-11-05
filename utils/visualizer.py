@@ -45,13 +45,3 @@ class MPLPosePrinter:
 
     def set_title(self, title):
         self.ax.set_title(title)
-
-    def save(self, path):
-        import cv2
-        path = path + ".png"
-        self.fig.savefig(path)
-        img = cv2.imread(path)
-        # cv2.imshow("", img)
-        # cv2.waitKey(0)
-        img = img[200:280, 280:360, :]
-        cv2.imwrite(path, img)

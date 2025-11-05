@@ -1,16 +1,11 @@
 import os
 from logging import INFO
-from human_pose_estimator import HumanPoseEstimator, HumanDetector
-# from utils.concurrency.generic_node_fps import GenericNodeFPS
-# from utils.concurrency.py_queue import PyQueue
-# from utils.concurrency.utils.signals import Signals
+from utils.modules import HumanPoseEstimator, HumanDetector
 from comfort import BaseConfig
-import numpy as np
 from pathlib import Path
 
 input_type = "skeleton"  # rgb, skeleton or hybrid
 seq_len = 8 if input_type != "skeleton" else 16
-base_dir = os.path.join('action_rec', 'hpe', 'weights', 'engines', 'docker')
 
 
 class HPE(BaseConfig):
@@ -34,17 +29,6 @@ class HPE(BaseConfig):
         height = 480
 
         necessary_percentage_visible_joints = 0.3
-
-
-class Logging(BaseConfig):
-    class Logger:
-        class Params:
-            level = INFO  # Minimum logging level or list of logging levels
-            recurring = False
-
-    debug = True
-    # options: rgb depth mask 'fps center hands partial scene reconstruction transform
-    keys = {'bbox': None, 'rgb': None}  # Debugging
 
 
 class HD(BaseConfig):

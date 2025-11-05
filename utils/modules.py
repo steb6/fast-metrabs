@@ -1,11 +1,9 @@
 import pickle
-from misc import homography, is_within_fov, reconstruct_absolute, postprocess_yolo_output
+from utils.utils import homography, is_within_fov, reconstruct_absolute, postprocess_yolo_output
 import einops
 import numpy as np
-from utils import Runner
-from tqdm import tqdm
+from utils.trt_runner import Runner
 import cv2
-from visualizer import MPLPosePrinter
 import copy
 
 
@@ -213,50 +211,3 @@ class HumanPoseEstimator:
                 "human_occupancy": human_occupancy,
                 "human_pixels": human_pixels,
                 "yarp_read_time": yarp_read_time}
-
-
-if __name__ == "__main__":
-    from configs.action_rec_config import HPE
-    from multiprocessing.managers import BaseManager
-    import pycuda.autoinit
-    from utils.concurrency.pypy_node import connect
-
-    # Connect to realsense
-    BaseManager.register('get_queue')
-    manager = BaseManager(address=('172.27.192.1', 5000), authkey=b'abracadabra')
-    connect(manager)
-    send_out = manager.get_queue('windows_out')
-
-    vis = MPLPosePrinter()
-
-    h = HumanPoseEstimator(**HPE.Args.to_dict())
-
-    for _ in tqdm(range(10000)):
-        img = send_out.get()["rgb"]
-        # cv2.imwrite('test1.jpg', img)
-        # img = cv2.imread('test1.jpg')
-        r = h.estimate(img)
-
-        if r is not None:
-
-            p = r["pose"]
-            e = r["edges"]
-            b = r["bbox"]
-
-            if p is not None:
-                print(np.sqrt(np.sum(np.square(np.array([0, 0, 0]) - np.array(p[0])))))
-                p = p - p[0]
-                vis.clear()
-                vis.print_pose(p*5, e)
-                vis.sleep(0.001)
-
-            if b is not None:
-                x1_, x2_, y1_, y2_ = b
-                xm = int((x1_ + x2_) / 2)
-                ym = int((y1_ + y2_) / 2)
-                l = max(xm - x1_, ym - y1_)
-                img = img[(ym - l if ym - l > 0 else 0):(ym + l), (xm - l if xm - l > 0 else 0):(xm + l)]
-                img = cv2.resize(img, (224, 224))
-
-        cv2.imshow("", img)
-        cv2.waitKey(1)
