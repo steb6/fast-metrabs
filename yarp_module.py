@@ -6,6 +6,7 @@ import logging
 import sys
 import cv2
 import pycuda.autoinit
+from dataclasses import asdict
 from utils.modules import HumanDetector
 from inference import HumanPoseEstimator
 from configs import HPE, HD
@@ -52,9 +53,9 @@ class HumanPoseEstimationModule(yarp.RFModule):
 
         # Load the human detector and pose estimator models
         logging.info("Loading human detector model...")
-        self.detector = HumanDetector(**HD.Args.to_dict())
+        self.detector = HumanDetector(**asdict(HD))
         logging.info("Loading human pose estimator model...")
-        self.estimator = HumanPoseEstimator(**HPE.Args.to_dict())
+        self.estimator = HumanPoseEstimator(**asdict(HPE))
         logging.info("Models loaded successfully")
 
         # Create 3D pose visualizer

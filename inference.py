@@ -2,6 +2,7 @@ import numpy as np
 from tqdm import tqdm
 import cv2
 import os
+from dataclasses import asdict
 from utils.visualizer import MPLPosePrinter
 from utils.modules import HumanDetector, HumanPoseEstimator
 from configs import HPE, HD
@@ -50,9 +51,9 @@ if __name__ == "__main__":
 
     vis = MPLPosePrinter()
 
-    d = HumanDetector(**HD.Args.to_dict())
+    d = HumanDetector(**asdict(HD))
 
-    h = HumanPoseEstimator(**HPE.Args.to_dict())
+    h = HumanPoseEstimator(**asdict(HPE))
 
     for _ in tqdm(range(10000)):
         ret, img = cap.read()
