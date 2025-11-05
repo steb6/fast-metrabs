@@ -41,7 +41,7 @@ cd setup
 python create_engine_bbone.py
 cd ..
 ```
-Do it for all files in the setup folder (e.g. bbone, heads, image_transformation,  yolo).
+Do it for all files in the setup folder (e.g. `bbone`, `heads`, `image_transformation`,  `yolo`).
 This will generate optimized `.engine` files in the `assets/` directory.
 
 ## 📹 Usage
@@ -114,8 +114,6 @@ Edit `configs.py` to customize:
 ## 📋 Requirements
 
 - CUDA-capable GPU (CUDA 11.x or 12.x)
-- Python 3.9
-- TensorRT
 - YARP (optional, for distributed mode)
 
 ## 🔧 Troubleshooting
