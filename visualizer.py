@@ -9,16 +9,10 @@ class MPLPosePrinter:
         self.ax.view_init(elev=180, azim=0, vertical_axis='y')
 
         # Setting the axes properties
-        self.ax.set_xlim3d([-1.0, 1.0])
-        # self.ax.set_xlabel('X')
+        self.ax.set_xlim3d([-2.0, 2.0])
+        self.ax.set_ylim3d([-2.0, 2.0])
+        self.ax.set_zlim3d([-2.0, 2.0])
 
-        self.ax.set_ylim3d([-1.0, 1.0])
-        # self.ax.set_ylabel('Y')
-
-        self.ax.set_zlim3d([-1.0, 1.0])
-        # self.ax.set_zlabel('Z')
-
-        # self.ax.set_title('3D Test')
         plt.grid(False)
         plt.axis('off')
 
@@ -39,6 +33,11 @@ class MPLPosePrinter:
 
     def clear(self):
         self.ax.clear()
+        self.ax.set_xlim3d([-2.0, 2.0])
+        self.ax.set_ylim3d([-2.0, 2.0])
+        self.ax.set_zlim3d([-2.0, 2.0])
+        plt.grid(False)
+        plt.axis('off')
 
     @staticmethod
     def sleep(t):
