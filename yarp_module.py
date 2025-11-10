@@ -69,7 +69,7 @@ class HumanPoseEstimationModule(yarp.RFModule):
         input_image = self.input_port.read(False)
         
         if input_image is None:
-            print("No image received")
+            # print("No image received")
             return True  # No image received, continue
 
         # Copy the received image to the input buffer
@@ -120,19 +120,19 @@ class HumanPoseEstimationModule(yarp.RFModule):
                 self.vis.sleep(0.001)
             
             # Structure: [num_joints, x1, y1, z1, x2, y2, z2, ...]
-            pose_msg.addInt32(len(pose))
+            # pose_msg.addInt32(len(pose))
             for joint in pose:
                 pose_msg.addFloat64(float(joint[0]))
                 pose_msg.addFloat64(float(joint[1]))
                 pose_msg.addFloat64(float(joint[2]))
             
-            # Add human distance
-            pose_msg.addFloat64(float(human_distance))
+            # # Add human distance
+            # pose_msg.addFloat64(float(human_distance))
             
-            # Add human position
-            pose_msg.addFloat64(float(human_position[0]))
-            pose_msg.addFloat64(float(human_position[1]))
-            pose_msg.addFloat64(float(human_position[2]))
+            # # Add human position
+            # pose_msg.addFloat64(float(human_position[0]))
+            # pose_msg.addFloat64(float(human_position[1]))
+            # pose_msg.addFloat64(float(human_position[2]))
             
             logging.debug(f"Pose detected with {len(pose)} joints, distance: {human_distance:.2f}")
         else:

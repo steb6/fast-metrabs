@@ -6,12 +6,14 @@ import cv2
 import sys
 import time
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def main():
     # Video file path
-    VIDEO_PATH = "input.mp4"
+    # VIDEO_PATH = "input.mp4"
+    VIDEO_PATH = ""
     
     # Initialize YARP network
     yarp.Network.init()
@@ -21,20 +23,43 @@ def main():
     output_port.open("/test_yarp/image:o")
     logging.info(f"Output port opened: {output_port.getName()}")
     
-    # Try to connect to the HPE module input port
-    logging.info("Attempting to connect to /hpe/image:i ...")
-    if not yarp.Network.connect("/test_yarp/image:o", "/hpe/image:i"):
-        logging.warning("Could not auto-connect to /hpe/image:i. You may need to connect manually.")
+    # # Open video file
+    # cap = cv2.VideoCapture(VIDEO_PATH)
+    # if not cap.isOpened():
+    #     logging.error(f"Failed to open video file: {VIDEO_PATH}")
+    #     output_port.close()
+    #     yarp.Network.fini()
+    #     return
+
+    if VIDEO_PATH is not "":
+        if not os.path.exists(VIDEO_PATH):
+            raise FileNotFoundError(f"Video path not found: {VIDEO_PATH}")
+        cap = cv2.VideoCapture(VIDEO_PATH)
+        # try to set desired properties for consistency (may be ignored for some file formats)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, W)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, H)
+        cap.set(cv2.CAP_PROP_FPS, 30)
     else:
-        logging.info("Connected to /hpe/image:i")
-    
-    # Open video file
-    cap = cv2.VideoCapture(VIDEO_PATH)
-    if not cap.isOpened():
-        logging.error(f"Failed to open video file: {VIDEO_PATH}")
-        output_port.close()
-        yarp.Network.fini()
-        return
+        # Connect to realsense / probe available cameras
+        cameras = []
+        for i in range(10):
+            cap = cv2.VideoCapture(i)
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, W)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, H)
+            cap.set(cv2.CAP_PROP_FPS, 30)
+            if cap.read()[0]:
+                cameras.append(i)
+                cap.release()
+        print(f"Available cameras: {cameras}")
+        if len(cameras) == 0:
+            raise Exception("No cameras available")
+        cap = cv2.VideoCapture(cameras[-1])
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, W)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, H)
+        cap.set(cv2.CAP_PROP_FPS, 30)
     
     # Get video properties
     fps = cap.get(cv2.CAP_PROP_FPS)
