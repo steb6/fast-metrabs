@@ -27,11 +27,6 @@ class HumanPoseEstimationModule(yarp.RFModule):
         self.input_port.open(f"/{hpe_namespace}/image:i")
         logging.info(f"Input port opened: {self.input_port.getName()}")
 
-        # Create output port for sending annotated images
-        self.output_port = yarp.BufferedPortImageRgb()
-        self.output_port.open(f"/{hpe_namespace}/image:o")
-        logging.info(f"Output port opened: {self.output_port.getName()}")
-
         # Create output port for sending pose data (as Bottle)
         self.pose_output_port = yarp.Port()
         self.pose_output_port.open(f"/{hpe_namespace}/pose:o")
@@ -69,7 +64,6 @@ class HumanPoseEstimationModule(yarp.RFModule):
         input_image = self.input_port.read(False)
         
         if input_image is None:
-            # print("No image received")
             return True  # No image received, continue
 
         # Copy the received image to the input buffer
@@ -78,10 +72,6 @@ class HumanPoseEstimationModule(yarp.RFModule):
         
         # Ensure frame is in BGR format for OpenCV processing
         frame = cv2.resize(frame, (self.image_width, self.image_height))
-
-        # Display input frame for debugging
-        cv2.imshow("Input Frame", frame)
-        cv2.waitKey(1)
         
         # Run human detection
         det_res = self.detector.estimate(frame)
@@ -93,16 +83,13 @@ class HumanPoseEstimationModule(yarp.RFModule):
             hpe_res = self.estimator.estimate(frame, bbox, 0.0)
         
         # Prepare output image with bbox drawn
-        output_frame = frame.copy()
         if bbox is not None:
             x1, y1, x2, y2 = bbox
-            cv2.rectangle(output_frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
-        
-        # Send annotated image to output port
-        self.output_buffer_array[:, :] = output_frame
-        output_image = self.output_port.prepare()
-        output_image.copy(self.output_buffer_image)
-        self.output_port.write()
+            frame = cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+
+        # Display input frame for debugging
+        cv2.imshow("Annotated Frame", frame)
+        cv2.waitKey(1)
         
         # Send pose data to pose output port
         pose_msg = yarp.Bottle()
