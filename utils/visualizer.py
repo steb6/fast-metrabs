@@ -15,6 +15,7 @@ class MPLPosePrinter:
 
         plt.grid(False)
         plt.axis('off')
+        plt.title('3D Human Pose')
 
     def print_pose(self, pose, edges, color='b'):
         self.ax.plot([0, 0], [-1, 1], [0, 0])
@@ -42,6 +43,3 @@ class MPLPosePrinter:
     @staticmethod
     def sleep(t):
         plt.pause(t)
-
-    def set_title(self, title):
-        self.ax.set_title(title)

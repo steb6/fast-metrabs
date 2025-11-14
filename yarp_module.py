@@ -88,7 +88,8 @@ class HumanPoseEstimationModule(yarp.RFModule):
             frame = cv2.rectangle(frame, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
 
         # Display input frame for debugging
-        cv2.imshow("Annotated Frame", frame)
+        cv2.imshow("Human detection", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+)
         cv2.waitKey(1)
         
         # Send pose data to pose output port
