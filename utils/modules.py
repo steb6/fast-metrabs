@@ -109,6 +109,7 @@ class HumanPoseEstimator:
 
         # Apply homography
         H = self.K @ np.linalg.inv(new_K @ homo_inv)
+        H_inv = np.linalg.inv(H)  # Inverse homography for 2D reprojection (3x3 matrix)
         bbone_in = self.image_transformation(rgb.astype(int), H.astype(np.float32))
 
         bbone_in = bbone_in[0].reshape(1, 256, 256, 3)  # [..., ::-1]
@@ -226,6 +227,8 @@ class HumanPoseEstimator:
                 "pose_relative": pred3d_relative,
                 "pred2d_bbone": pred2d_bbone,  # 2D predictions in 256x256 bbone space (32 joints, BEFORE expand)
                 "bbone_image": bbone_image,  # The 256x256 transformed image
+                "H_inv": H_inv,  # Inverse homography for transforming 2D points back to original frame
+                "bbox": bbox,  # Bounding box used for the transformation
                 "edges": edges,
                 "human_distance": human_distance,
                 "human_position": human_position,

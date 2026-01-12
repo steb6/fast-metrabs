@@ -111,6 +111,7 @@ class HumanPoseEstimationModule(yarp.RFModule):
                     if HPE.visualize_projection:
                         pred2d_bbone = hpe_res["pred2d_bbone"]  # 32 joints in 256x256 space (BEFORE expand_joints)
                         bbone_image = hpe_res["bbone_image"]  # 256x256 transformed image
+                        H_inv = hpe_res["H_inv"]  # Inverse homography to transform back to original frame
                         
                         # Visualize bbone with 2D hand predictions
                         bbone_vis = bbone_image.astype(np.uint8).copy()
@@ -138,7 +139,50 @@ class HumanPoseEstimationModule(yarp.RFModule):
                         # Show the bbone with hand annotations
                         cv2.imshow("2D Hand Predictions (BBox Space)", cv2.cvtColor(bbone_vis, cv2.COLOR_RGB2BGR))
                         
-                        # Also draw 3D reprojection on main frame for comparison
+                        # PROJECT HAND POINTS BACK TO ORIGINAL FRAME using bbox scaling
+                        # Simpler approach: the bbone image is a 256x256 crop of the bbox region
+                        # So we just need to scale from 256x256 back to the bbox size and offset
+                        bbox_info = hpe_res["bbox"]
+                        x1, y1, x2, y2 = bbox_info
+                        bbox_width = x2 - x1
+                        bbox_height = y2 - y1
+                        
+                        hand_joints_32 = [20, 22]
+                        hand_points_original = []
+                        
+                        for hand_idx in hand_joints_32:
+                            if hand_idx < len(pred2d_bbone):
+                                hand_2d = pred2d_bbone[hand_idx]
+                                # Scale from 256x256 to bbox size and add bbox offset
+                                x_orig = (hand_2d[0] / 256.0) * bbox_width + x1
+                                y_orig = (hand_2d[1] / 256.0) * bbox_height + y1
+                                hand_points_original.append([x_orig, y_orig])
+                        
+                        hand_points_original = np.array(hand_points_original, dtype=np.float32)
+                        
+                        # Draw hand points on the original frame
+                        if len(hand_points_original) > 0:
+                            for i in range(len(hand_points_original)):
+                                point_orig = hand_points_original[i]
+                                
+                                x_val = float(point_orig[0])
+                                y_val = float(point_orig[1])
+                                
+                                # Skip invalid points
+                                if not (0 <= x_val < self.image_width and 0 <= y_val < self.image_height):
+                                    continue
+                                
+                                pt_x = int(round(x_val))
+                                pt_y = int(round(y_val))
+                                
+                                # Draw red circles for hands on original frame
+                                cv2.circle(frame_vis, (pt_x, pt_y), 15, (255, 0, 0), -1)  # Red filled circle in RGB
+                                cv2.circle(frame_vis, (pt_x, pt_y), 17, (0, 255, 0), 2)  # Green border
+                                hand_label = "L_Hand" if i == 0 else "R_Hand"
+                                cv2.putText(frame_vis, hand_label, (pt_x + 20, pt_y), 
+                                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                        
+                        # Also draw 3D reprojection on main frame for comparison (skeleton only, not individual circles)
                         joints_2d_reprojected = project_pose_to_image(pose_absolute_camera, self.estimator.K)
                         frame_vis = draw_skeleton_2d(frame_vis, joints_2d_reprojected, edges, 
                                                     color=(255, 255, 0), thickness=3, radius=6)
@@ -176,7 +220,6 @@ class HumanPoseEstimationModule(yarp.RFModule):
         # Handle module interruption
         logging.info("HPE module interrupted")
         self.input_port.interrupt()
-        self.output_port.interrupt()
         self.pose_output_port.interrupt()
         return True
 
@@ -184,7 +227,6 @@ class HumanPoseEstimationModule(yarp.RFModule):
         # Close ports and cleanup resources
         logging.info("Closing HPE module")
         self.input_port.close()
-        self.output_port.close()
         self.pose_output_port.close()
         return True
 
