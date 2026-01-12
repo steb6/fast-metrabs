@@ -54,9 +54,10 @@ class HumanDetector:
 class HumanPoseEstimator:
     def __init__(self, skeleton=None, image_transformation_engine_path=None, bbone_engine_path=None,
                  heads_engine_path=None, skeleton_types_path=None, expand_joints_path=None, fx=None, fy=None, ppx=None,
-                 ppy=None, necessary_percentage_visible_joints=None, width=None, height=None):
+                 ppy=None, necessary_percentage_visible_joints=None, width=None, height=None, absolute_mode=True,
+                 extrinsics_rotation=None, extrinsics_translation=None, visualize_projection=True):
 
-        # Intrinsics and K matrix of RealSense
+        # Intrinsics and K matrix of Camera
         self.K = np.zeros((3, 3), np.float32)
         self.K[0][0] = fx
         self.K[0][2] = ppx
@@ -76,6 +77,29 @@ class HumanPoseEstimator:
         self.heads = Runner(heads_engine_path)
 
         self.necessary_percentage_visible_joints = necessary_percentage_visible_joints
+        
+        # Absolute pose estimation settings
+        self.absolute_mode = absolute_mode
+        self.visualize_projection = visualize_projection
+        
+        # Camera extrinsics: transformation from camera frame to world frame
+        # Default to identity (camera frame = world frame)
+        if extrinsics_rotation is not None:
+            self.R_cam_to_world = np.array(extrinsics_rotation, dtype=np.float32)
+        else:
+            self.R_cam_to_world = np.eye(3, dtype=np.float32)
+        
+        if extrinsics_translation is not None:
+            self.t_cam_to_world = np.array(extrinsics_translation, dtype=np.float32).reshape(3, 1)
+        else:
+            self.t_cam_to_world = np.zeros((3, 1), dtype=np.float32)
+    
+    def update_extrinsics(self, rotation=None, translation=None):
+        """Update camera extrinsics (useful for reading from YARP port later)"""
+        if rotation is not None:
+            self.R_cam_to_world = np.array(rotation, dtype=np.float32)
+        if translation is not None:
+            self.t_cam_to_world = np.array(translation, dtype=np.float32).reshape(3, 1)
 
     def estimate(self, rgb, bbox, yarp_read_time):
 
@@ -147,36 +171,16 @@ class HumanPoseEstimator:
         # Move the skeleton into estimated absolute position if necessary
         pred3d = reconstruct_absolute(pred2d, pred3d, new_K[None, ...], is_predicted_to_be_in_fov, weak_perspective=False)
 
-        # # TODO EXP START show pred2d on bbone
-        #bbone_aux = copy.deepcopy(bbone_in[0])
-        #pred2d = pred2d[0]
-        #is_predicted_to_be_in_fov = is_predicted_to_be_in_fov[0]
-        #for p, is_fov in zip(pred2d, is_predicted_to_be_in_fov):
-        #    bbone_aux = cv2.circle(bbone_aux, (int(p[0]), int(p[1])), 2, (0, 255, 0) if is_fov else (0, 0, 255), 2)
-        #    cv2.imshow("2d on bbone", bbone_aux.astype(np.uint8))
-        #cv2.waitKey(1)
-        # # TODO EXP END
-        # # TODO EXP START show reconstructed 3d on bbone
-        # bbone_aux = copy.deepcopy(bbone_in[0])
-        # pred3d_projected = pred3d @ new_K
-        # for p in pred3d_projected[0]:
-        #     bbone_aux = cv2.circle(bbone_aux, (int(p[0]+(bbone_aux.shape[1]/2)), int(p[1]+(bbone_aux.shape[0]/2))), 2, (0, 255, 0), 2)
-        # cv2.imshow("3d on bbone", bbone_aux.astype(np.uint8))
-        # cv2.waitKey(1)
-        # # TODO EXP END
-        # # TODO EXP START
-        # pred3d_projected = pred3d @ homo_inv
-        # pred3d_projected = pred3d_projected @ self.K
-        # for p in pred3d_projected[0]:
-        #     frame = cv2.circle(frame, (int(p[0]+(frame.shape[1]/2)), int(p[1]+(frame.shape[0]/2))), 2, (0, 255, 0), 2)
-        # cv2.imshow("3d on origin", frame.astype(np.uint8))
-        # cv2.waitKey(1)
-        # # TODO EXP END
-
+        # Save pred2d BEFORE any transformation (in 256x256 bbone space) WITHOUT removing batch dim yet
+        pred2d_bbone_raw = pred2d.copy()  # Keep batch dimension for now
+        bbone_image = bbone_in[0].copy()  # For visualization
+        
         # Go back in original space (without augmentation and homography)
         pred3d = pred3d @ homo_inv
+        
         # Get correct skeleton
         pred3d = (pred3d.swapaxes(1, 2) @ self.expand_joints).swapaxes(1, 2)
+        
         if self.skeleton is not None:
             pred3d = pred3d[:, self.skeleton_types[self.skeleton]['indices']]
             edges = self.skeleton_types[self.skeleton]['edges']
@@ -184,19 +188,31 @@ class HumanPoseEstimator:
             edges = None
 
         pred3d = pred3d[0]  # Remove batch dimension
-        pred2d = pred2d[0]
+        pred2d = pred2d[0]  # Remove batch dimension for later use
+        pred2d_bbone = pred2d_bbone_raw[0]  # Now extract for visualization
 
-
+        # Store absolute camera-frame coordinates before any transformation
+        pred3d_absolute_camera = pred3d.copy()
 
         human_distance = np.sqrt(
             np.sum(np.square(np.array([0, 0, 0]) - np.array(pred3d[0])))) * 2.5
         human_position = pred3d[0, :]
         human_pixels2 = self.K@human_position
 
-        pred3d = pred3d - pred3d[0, :]
+        # Transform to world frame if extrinsics are provided
+        pred3d_absolute_world = (self.R_cam_to_world @ pred3d_absolute_camera.T).T + self.t_cam_to_world.T
+
+        # For backward compatibility: compute relative pose (pelvis-centered)
+        pred3d_relative = pred3d - pred3d[0, :]
+        
+        # Choose output based on mode
+        if self.absolute_mode:
+            pred3d_output = pred3d_absolute_camera  # Use camera-frame absolute coordinates
+        else:
+            pred3d_output = pred3d_relative  # Use relative (pelvis-centered) coordinates
 
         # Compute human occupancy
-        pred3d_0 = pred3d #- pred3d[0]
+        pred3d_0 = pred3d_output
         x_min, x_max, z_min, z_max = min(pred3d_0[:, 0]), max(pred3d_0[:, 0]), min(pred3d_0[:, 2]), max(pred3d_0[:, 2])
         human_occupancy = (x_min, x_max, z_min, z_max)
         index_min = np.argmin(pred3d_0[:, 0])
@@ -204,7 +220,12 @@ class HumanPoseEstimator:
         x_min_pixel, y_min_pixel, x_max_pixel, y_max_pixel = pred2d[0,0],pred2d[0,1],pred2d[index_max,0],pred2d[index_max,1]
         human_pixels = (x_min_pixel,y_min_pixel,x_max_pixel,y_max_pixel)
 
-        return {"pose": pred3d,
+        return {"pose": pred3d_output,
+                "pose_absolute_camera": pred3d_absolute_camera,
+                "pose_absolute_world": pred3d_absolute_world,
+                "pose_relative": pred3d_relative,
+                "pred2d_bbone": pred2d_bbone,  # 2D predictions in 256x256 bbone space (32 joints, BEFORE expand)
+                "bbone_image": bbone_image,  # The 256x256 transformed image
                 "edges": edges,
                 "human_distance": human_distance,
                 "human_position": human_position,

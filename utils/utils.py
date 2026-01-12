@@ -206,3 +206,56 @@ def reconstruct_absolute(coords2d, coords3d_rel, intrinsics, is_predicted_to_be_
 
 def project(points):
     return points[..., :2] / points[..., 2:3]
+
+
+def project_pose_to_image(pose_3d, intrinsics):
+    """
+    Project 3D pose in camera frame to 2D image coordinates.
+    
+    Args:
+        pose_3d: 3D pose in camera frame, shape (N_joints, 3) or (3,) for single joint
+        intrinsics: Camera intrinsic matrix K, shape (3, 3)
+    
+    Returns:
+        2D pixel coordinates, shape (N_joints, 2) or (2,) for single joint
+    """
+    if pose_3d.ndim == 1:
+        pose_3d = pose_3d.reshape(1, 3)
+    
+    # Project: pixel = K @ [X, Y, Z]^T, then divide by Z
+    pose_homogeneous = (intrinsics @ pose_3d.T).T  # (N, 3)
+    pose_2d = pose_homogeneous[:, :2] / pose_homogeneous[:, 2:3]  # (N, 2)
+    
+    return pose_2d
+
+
+def draw_skeleton_2d(image, joints_2d, edges, color=(0, 255, 0), thickness=2, radius=3):
+    """
+    Draw 2D skeleton on image.
+    
+    Args:
+        image: Image to draw on (will be modified in-place)
+        joints_2d: 2D joint positions, shape (N_joints, 2)
+        edges: List of edge connections, each edge is (joint_idx1, joint_idx2)
+        color: RGB color tuple
+        thickness: Line thickness
+        radius: Joint circle radius
+    
+    Returns:
+        Modified image
+    """
+    import cv2
+    
+    # Draw edges
+    if edges is not None:
+        for edge in edges:
+            pt1 = tuple(joints_2d[edge[0]].astype(int))
+            pt2 = tuple(joints_2d[edge[1]].astype(int))
+            cv2.line(image, pt1, pt2, color, thickness)
+    
+    # Draw joints
+    for joint in joints_2d:
+        pt = tuple(joint.astype(int))
+        cv2.circle(image, pt, radius, color, -1)
+    
+    return image
