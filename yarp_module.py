@@ -160,7 +160,10 @@ class HumanPoseEstimationModule(yarp.RFModule):
                         
                         hand_points_original = np.array(hand_points_original, dtype=np.float32)
                         
-                        # Draw hand points on the original frame
+                        # Draw hand points on the original frame and create hand crops
+                        hand_crops = []
+                        crop_size = 240  # Size of the crop around each hand
+                        
                         if len(hand_points_original) > 0:
                             for i in range(len(hand_points_original)):
                                 point_orig = hand_points_original[i]
@@ -181,6 +184,33 @@ class HumanPoseEstimationModule(yarp.RFModule):
                                 hand_label = "L_Hand" if i == 0 else "R_Hand"
                                 cv2.putText(frame_vis, hand_label, (pt_x + 20, pt_y), 
                                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                                
+                                # Create crop around hand
+                                x1_crop = max(0, pt_x - crop_size // 2)
+                                y1_crop = max(0, pt_y - crop_size // 2)
+                                x2_crop = min(self.image_width, pt_x + crop_size // 2)
+                                y2_crop = min(self.image_height, pt_y + crop_size // 2)
+                                
+                                hand_crop = frame[y1_crop:y2_crop, x1_crop:x2_crop].copy()
+                                
+                                # Resize to fixed size if crop is smaller due to boundary
+                                if hand_crop.shape[0] > 0 and hand_crop.shape[1] > 0:
+                                    hand_crop_resized = cv2.resize(hand_crop, (crop_size, crop_size))
+                                    # Add label to crop
+                                    cv2.putText(hand_crop_resized, hand_label, (5, 15), 
+                                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                                    hand_crops.append(hand_crop_resized)
+                        
+                        # Concatenate and display hand crops
+                        if len(hand_crops) > 0:
+                            # Pad with empty crops if needed to have exactly 2
+                            while len(hand_crops) < 2:
+                                empty_crop = np.zeros((crop_size, crop_size, 3), dtype=np.uint8)
+                                hand_crops.append(empty_crop)
+                            
+                            # Concatenate horizontally
+                            hands_concat = np.hstack(hand_crops[:2])
+                            cv2.imshow("Hand Crops", cv2.cvtColor(hands_concat, cv2.COLOR_RGB2BGR))
                         
                         # Also draw 3D reprojection on main frame for comparison (skeleton only, not individual circles)
                         joints_2d_reprojected = project_pose_to_image(pose_absolute_camera, self.estimator.K)
